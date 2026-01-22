@@ -2,9 +2,9 @@ import streamlit as st
 import requests
 from bs4 import BeautifulSoup
 from langchain_community.document_loaders import PyPDFLoader
-from langchain_text_splitters import CharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_core.documents import Document
 from groq import Groq
 import tempfile
@@ -30,13 +30,22 @@ if 'rag_type' not in st.session_state:
 # Sidebar configuration
 st.sidebar.title("⚙️ Configuration")
 
-# API Key input
+# --- UPDATED API KEY LOGIC ---
+# User must enter their own key; we prioritize the input box over the .env file
 groq_api_key = st.sidebar.text_input(
     "Groq API Key",
     type="password",
-    value=os.getenv("GROQ_API_KEY"),
-    help="Enter your Groq API key"
+    value=os.getenv("GROQ_API_KEY") if os.getenv("GROQ_API_KEY") else "",
+    placeholder="Enter your gsk_... key here",
+    help="You can find your API key at https://console.groq.com/keys"
 )
+
+# Visual validation for the user
+if not groq_api_key:
+    st.sidebar.warning("⚠️ API Key is required to run this app.")
+elif not groq_api_key.startswith("gsk_"):
+    st.sidebar.error("❌ Invalid Format: Groq keys usually start with 'gsk_'")
+# -----------------------------
 
 model_name = st.sidebar.selectbox(
     "Model",
@@ -84,13 +93,24 @@ def process_pdf(uploaded_file):
         return None
 
 def create_vector_db(documents, embeddings):
-    """Create FAISS vector database from documents"""
     try:
-        text_splitter = CharacterTextSplitter(
+        # If documents list is empty, catch it early
+        if not documents:
+            st.error("No text was extracted from the source.")
+            return None, 0
+            
+        text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=1000,
-            chunk_overlap=200
+            chunk_overlap=200,
+            separators=["\n\n", "\n", " ", ""]
         )
         chunks = text_splitter.split_documents(documents)
+        
+        # Ensure chunks were actually created
+        if not chunks:
+            st.error("Text splitting resulted in zero chunks.")
+            return None, 0
+            
         vector_db = FAISS.from_documents(chunks, embeddings)
         return vector_db, len(chunks)
     except Exception as e:
@@ -100,18 +120,21 @@ def create_vector_db(documents, embeddings):
 def scrape_website(url):
     """Scrape website content"""
     try:
-        response = requests.get(url, timeout=10)
+        response = requests.get(url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
         response.raise_for_status()
         
         soup = BeautifulSoup(response.text, "html.parser")
         
         texts = []
-        for tag in soup.find_all(["p", "li", "a", "td", "h1", "h2", "h3"]):
+        for tag in soup.find_all(["p", "li", "td", "h1", "h2", "h3"]):
             text = tag.get_text(strip=True)
             if text and len(text) > 30:
                 texts.append(text)
         
         full_text = "\n".join(texts)
+        if not full_text.strip():
+            st.error("The website returned no readable text content.")
+            return None # Correctly return None only if empty
         
         document = Document(
             page_content=full_text,
@@ -130,7 +153,7 @@ def chatbot(message, vector_db, api_key, model):
         result = vector_db.similarity_search(message, k=3)
         context = []
         for i in result:
-            context.append(f"Chunk: {i.page_content}")
+            context.append(i.page_content)
         
         # Create Groq client
         client = Groq(api_key=api_key)
@@ -140,7 +163,9 @@ You are a smart chatbot. You need to respond to user questions only by referring
 Don't give any reference to the chunk which you are referring to. Just return a well-structured response as the answer to the user question.
 """
         
-        finalprompt = f"{prompt}\n\nKnowledge Base: {context}"
+        # JOINING THE CONTEXT LIST INTO A SINGLE STRING FOR BETTER LLM PERFORMANCE
+        context_string = "\n\n".join(context)
+        finalprompt = f"{prompt}\n\nKnowledge Base:\n{context_string}"
         
         completion = client.chat.completions.create(
             model=model,
@@ -177,24 +202,21 @@ with col1:
         )
         
         if uploaded_file is not None:
+            # Check for key before allowing processing
             if st.button("🔄 Process PDF", type="primary"):
-                with st.spinner("Processing PDF..."):
-                    # Load embeddings
-                    embeddings = load_embeddings()
-                    
-                    # Process PDF
-                    docs = process_pdf(uploaded_file)
-                    
-                    if docs:
-                        # Create vector database
-                        vector_db, num_chunks = create_vector_db(docs, embeddings)
-                        
-                        if vector_db:
-                            st.session_state.vector_db = vector_db
-                            st.session_state.rag_type = "PDF"
-                            st.session_state.chat_history = []
-                            st.success(f"✅ PDF processed successfully! Created {num_chunks} chunks.")
-                            st.info(f"📄 Document: {uploaded_file.name}")
+                if not groq_api_key or not groq_api_key.startswith("gsk_"):
+                    st.error("🔑 Valid Groq API Key required to process PDF.")
+                else:
+                    with st.spinner("Processing PDF..."):
+                        embeddings = load_embeddings()
+                        docs = process_pdf(uploaded_file)
+                        if docs:
+                            vector_db, num_chunks = create_vector_db(docs, embeddings)
+                            if vector_db:
+                                st.session_state.vector_db = vector_db
+                                st.session_state.rag_type = "PDF"
+                                st.session_state.chat_history = []
+                                st.success(f"✅ PDF processed! Created {num_chunks} chunks.")
     
     else:  # Web Scraping
         st.markdown("### Enter Website URL")
@@ -205,29 +227,28 @@ with col1:
         )
         
         if st.button("🌐 Scrape Website", type="primary"):
-            with st.spinner(f"Scraping {url}..."):
-                # Load embeddings
-                embeddings = load_embeddings()
-                
-                # Scrape website
-                documents = scrape_website(url)
-                
-                if documents:
-                    # Create vector database
-                    vector_db, num_chunks = create_vector_db(documents, embeddings)
-                    
-                    if vector_db:
-                        st.session_state.vector_db = vector_db
-                        st.session_state.rag_type = "Web"
-                        st.session_state.chat_history = []
-                        st.success(f"✅ Website scraped successfully! Created {num_chunks} chunks.")
-                        st.info(f"🌐 Source: {url}")
+            # Check for key before allowing scraping
+            if not groq_api_key or not groq_api_key.startswith("gsk_"):
+                st.error("🔑 Valid Groq API Key required to scrape website.")
+            else:
+                with st.spinner(f"Scraping {url}..."):
+                    embeddings = load_embeddings()
+                    documents = scrape_website(url)
+                    if documents:
+                        vector_db, num_chunks = create_vector_db(documents, embeddings)
+                        if vector_db:
+                            st.session_state.vector_db = vector_db
+                            st.session_state.rag_type = "Web"
+                            st.session_state.chat_history = []
+                            st.success(f"✅ Website scraped! Created {num_chunks} chunks.")
 
 with col2:
     st.subheader("💬 Chat Interface")
     
     if st.session_state.vector_db is None:
         st.info("👈 Please upload a PDF or scrape a website to start chatting!")
+    elif not groq_api_key or not groq_api_key.startswith("gsk_"):
+        st.warning("🔑 Please enter a valid Groq API Key in the sidebar to use the Chat Interface.")
     else:
         # Display chat history
         chat_container = st.container()
@@ -242,11 +263,9 @@ with col2:
         user_question = st.chat_input("Ask a question about your document...")
         
         if user_question:
-            # Add user message to chat
             with st.chat_message("user"):
                 st.write(user_question)
             
-            # Generate response
             with st.chat_message("assistant"):
                 with st.spinner("Thinking..."):
                     response = chatbot(
@@ -257,7 +276,6 @@ with col2:
                     )
                     st.write(response)
             
-            # Save to chat history
             st.session_state.chat_history.append({
                 "question": user_question,
                 "answer": response
