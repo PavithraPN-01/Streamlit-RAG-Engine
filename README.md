@@ -72,7 +72,12 @@ This file **only contains the web scraping logic** and is kept separate for bett
 - Easy to reuse or extend scraping functionality
 - Improves code readability and maintainability
 
+> ⚠️ Note: This file **does not contain LLM, embeddings, or vector database logic**.  
+> It strictly focuses on **web data extraction only**.
+
+
 ---
+
 
 ## 💬 How It Works (High Level)
 
@@ -83,10 +88,6 @@ This file **only contains the web scraping logic** and is kept separate for bett
 - Relevant context is fetched based on the user query
 - Groq LLM generates accurate answers using Retrieval-Augmented Generation (RAG)
 
-> ⚠️ Note: This file **does not contain LLM, embeddings, or vector database logic**.  
-> It strictly focuses on **web data extraction only**.
-
----
 
 ## ▶️ How to Run the Application
 
@@ -114,6 +115,7 @@ docker run -p 8501:8501 rag-chatbot
 ```bash
 http://localhost:8501
 ```
+
 
 
 
