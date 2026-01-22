@@ -1,4 +1,4 @@
-# RAG-Powered Chatbot System 🤖
+# RAG  Chatbot System 🤖
 
 This project is a **Retrieval-Augmented Generation (RAG) based chatbot application** built using **Streamlit**, **LangChain**, and **Groq LLMs**.  
 It allows users to ask questions based on **PDF documents** or **web-scraped content**.
@@ -43,8 +43,6 @@ It allows users to ask questions based on **PDF documents** or **web-scraped con
 - **Groq LLM API**
 - **BeautifulSoup & Requests (Web Scraping)**
 - **Docker**
-
----
 
 ---
 
@@ -116,6 +114,11 @@ docker run -p 8501:8501 rag-chatbot
 http://localhost:8501
 ```
 
+### 1️⃣ Clone the Repository
+```bash
+git clone https://github.com/PavithraPN-01/Streamlit-RAG-Engine.git
+cd Streamlit-RAG-Engine
+```
 
 
 
