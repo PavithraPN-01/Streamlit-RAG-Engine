@@ -3,10 +3,13 @@
 This project is a **Retrieval-Augmented Generation (RAG) based chatbot application** built using **Streamlit**, **LangChain**, and **Groq LLMs**.  
 It allows users to ask questions based on **PDF documents** or **web-scraped content**.
 
+
 ---
+
 ## ⚠️ Important Note
 
-⚠️ **A valid Groq API key is mandatory to run this application.**
+
+⚠️ ** A valid Groq API key is mandatory to run this application.**
 
 - Users must create a Groq account and generate an API key from:  
   https://console.groq.com/keys
@@ -106,7 +109,7 @@ docker build -t rag-chatbot .
 docker run -p 8501:8501 rag-chatbot
 ```
 
-### Then open your browser and navigate to:
+### Then --> open your browser and navigate to:
 
 ```bash
 http://localhost:8501
@@ -115,15 +118,4 @@ http://localhost:8501
 
 
 
-
-
-
-
-
-
-
-
-
-
-## 📂 Project Structure
 
